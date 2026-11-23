@@ -1,0 +1,7 @@
+name: astrbot_plugin_parser_qqofficial
+display_name: 万能解析器（QQ官方版）
+desc: 适配 QQ 官方机器人 API 的链接解析器。支持视频、图集、音频。支持平台：A站、B站、抖音、tiktok、微博、小红书、快手、油管、X... 仅支持 QQ 群聊与私聊（C2C）。
+help: 略
+version: v1.6.2-qqofficial.1
+author: Zhalslar (上游) / BUGJI (QQ官方适配)
+repo: https://github.com/BUGJI/astrbot_plugin_parser_qqoffical
