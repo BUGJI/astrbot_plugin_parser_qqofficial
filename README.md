@@ -45,7 +45,7 @@ _✨ 链接解析器（QQ 官方机器人适配版） ✨_
 | Instagram | `p` / `reel` / `reels` / `tv` / `share` 链接 | ✅ | ✅ | ❌ | 支持帖子、图集和 Reels；Cookie 可提高私有或受限内容成功率 |
 | Twitter / X | `twitter.com` / `x.com` 状态链接 | ✅ | ✅ | ❌ | 通过解析服务提取推文视频、图片和引用内容 |
 | AcFun | `ac` 号或稿件链接 | ✅ | ❌ | ❌ | 下载并合并 HLS 视频流，Cookie 为可选项 |
-| 网易云音乐 | 歌曲链接、`163cn.tv` 短链、MP3/外链播放地址 | ❌ | ❌ | ✅ | 支持歌曲元数据、封面和音频直链，部分资源受版权或登录态限制 |
+| 网易云音乐 | 歌曲链接、`163cn.tv` 短链、MP3/外链播放地址 | ❌ | ❌ | ✅ | 支持歌曲元数据、封面和音频直链；以文件发送时可把歌名/歌手/专辑/封面/歌词写入音频标签，部分资源受版权或登录态限制 |
 | NGA | `ngabbs.com` / `nga.178.com` / `bbs.nga.cn` 主题链接 | ❌ | ✅ | ❌ | 返回主题首帖文本与图片；登录可见内容需要 Cookie |
 | CPP 无差别同人站 | `icp.red` 短链、展品 `/d/`、图文 `/w/` 链接 | ❌ | ✅ | ❌ | 未登录时展品试阅会退化为仅封面；正文显示长度可配置 |
 
@@ -124,7 +124,7 @@ https://github.com/BUGJI/astrbot_plugin_parser_qqofficial
 
 ### 解析器
 
-`parsers_template` 按平台分别配置，常见字段：`enable`（启用）、`cookies`（登录态）、`use_proxy`（走代理），以及各平台专属项（如 B 站 `video_quality` / `video_codec_list` / `block_pcdn`，Metube `metube_url` / `video_codec` / `video_format`，网易云 `audio_quality` / `audio_quality_fallback`，小黑盒 `show_body_text` / `use_original_image` / `mixed_layout` / `video_send_mode`）。
+`parsers_template` 按平台分别配置，常见字段：`enable`（启用）、`cookies`（登录态）、`use_proxy`（走代理），以及各平台专属项（如 B 站 `video_quality` / `video_codec_list` / `block_pcdn`，Metube `metube_url` / `video_codec` / `video_format`，网易云 `audio_quality` / `audio_quality_fallback` / `embed_metadata` / `embed_lyrics`，小黑盒 `show_body_text` / `use_original_image` / `mixed_layout` / `video_send_mode`）。
 
 ## 🎉 指令
 

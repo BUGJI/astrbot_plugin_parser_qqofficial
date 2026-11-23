@@ -1,15 +1,26 @@
+import asyncio
 import time
+from contextlib import suppress
+from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
 from re import Match, sub
 from typing import ClassVar
 from urllib.parse import urlparse
 
 from aiohttp import ClientError
-
 from astrbot.api import logger
 
+from ..audio_tags import (
+    AudioTags,
+    download_cover,
+    embed_audio_tags,
+    merge_lrc_lyrics,
+)
 from ..config import PluginConfig
 from ..data import Platform, QualityOption
 from ..download import Downloader
+from ..utils import safe_unlink
 from .base import BaseParser, QualityRequest, get_quality_request, handle
 from .ncm_login import QUALITY_LABELS, NCMLogin
 
@@ -49,6 +60,11 @@ class NCMParser(BaseParser):
         self.audio_quality_fallback = (
             fallback if fallback in FALLBACK_LEVELS else "exhigh"
         )
+        # 旧配置没有这两个键时按开启处理（ConfigNode 对已声明字段返回 None）
+        embed_metadata = getattr(self.mycfg, "embed_metadata", None)
+        self.embed_metadata = True if embed_metadata is None else bool(embed_metadata)
+        embed_lyrics = getattr(self.mycfg, "embed_lyrics", None)
+        self.embed_lyrics = True if embed_lyrics is None else bool(embed_lyrics)
         self._last_refresh_attempt = 0.0
 
     def reload_cookie(self) -> None:
@@ -116,13 +132,38 @@ class NCMParser(BaseParser):
         audio_name = (
             f"{file_stem} [{level_tag}].{ext}" if request else f"{file_stem}.{ext}"
         )
+
+        audio_task = self.downloader.download_audio(
+            audio_url,
+            audio_name=audio_name,
+            headers=self.headers,
+            proxy=self.proxy,
+        )
+        # 语音形式会被 QQ 转码为 silk，标签必然丢失，仅在文件模式下写入
+        if self.embed_metadata and self.cfg.audio_to_file:
+            # 歌词与音频下载并行，不阻塞解析结果返回
+            lyrics_task = (
+                asyncio.create_task(self._get_lyrics(song_id))
+                if self.embed_lyrics
+                else None
+            )
+            tags = AudioTags(
+                title=title,
+                artist=author_name,
+                album=album_name,
+                album_artist=author_name,
+                track=self._track_number(song),
+                date=self._format_date(album.get("publishTime")),
+                comment=f"https://music.163.com/#/song?id={song_id}",
+            )
+            audio_path = asyncio.create_task(
+                self._download_with_tags(audio_task, tags, cover_url, lyrics_task)
+            )
+        else:
+            audio_path = audio_task
+
         audio = self.create_audio_content(
-            self.downloader.download_audio(
-                audio_url,
-                audio_name=audio_name,
-                headers=self.headers,
-                proxy=self.proxy,
-            ),
+            audio_path,
             duration=duration_ms / 1000,
             quality=actual_level,
             quality_label=QUALITY_LABELS.get(actual_level, actual_level),
@@ -149,6 +190,84 @@ class NCMParser(BaseParser):
             if level and level not in levels:
                 levels.append(level)
         return levels
+
+    async def _download_with_tags(
+        self,
+        download_task: asyncio.Task[Path],
+        tags: AudioTags,
+        cover_url: str,
+        lyrics_task: asyncio.Task[str] | None = None,
+    ) -> Path:
+        """等待音频下载完成后写入标签，封面临时文件用后即删。"""
+        try:
+            path = await download_task
+        except BaseException:
+            if lyrics_task is not None:
+                lyrics_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await lyrics_task
+            raise
+
+        if lyrics_task is not None:
+            try:
+                lyrics = await lyrics_task
+            except Exception:
+                lyrics = ""
+            if lyrics:
+                tags = replace(tags, lyrics=lyrics)
+
+        cover_path = None
+        try:
+            if cover_url:
+                cover_path = await download_cover(
+                    self.session,
+                    cover_url,
+                    self.cfg.cache_dir,
+                    headers=self.headers,
+                    proxy=self.proxy,
+                )
+            await embed_audio_tags(path, tags, cover_path=cover_path)
+        finally:
+            if cover_path is not None:
+                await safe_unlink(cover_path)
+        return path
+
+    async def _get_lyrics(self, song_id: str) -> str:
+        """获取并合并原文/翻译歌词，失败返回空串。"""
+        login = NCMLogin(
+            self.cfg, jar=self.cookiejar, session=self.session, proxy=self.proxy
+        )
+        try:
+            body = await login.request(
+                "/api/song/lyric",
+                {"id": song_id, "lv": -1, "kv": -1, "tv": -1},
+            )
+        except Exception as exc:
+            logger.debug(f"[NCM] 获取歌词失败: {exc!r}")
+            return ""
+
+        lrc = str((body.get("lrc") or {}).get("lyric") or "")
+        tlyric = str((body.get("tlyric") or {}).get("lyric") or "")
+        return merge_lrc_lyrics(lrc, tlyric)
+
+    @staticmethod
+    def _track_number(song: dict) -> int | None:
+        try:
+            value = int(song.get("no") or 0)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    def _format_date(self, publish_time) -> str:
+        try:
+            timestamp = int(publish_time) / 1000
+            if timestamp <= 0:
+                return ""
+            return datetime.fromtimestamp(timestamp, tz=self.cfg.timezone).strftime(
+                "%Y-%m-%d"
+            )
+        except (TypeError, ValueError, OSError, OverflowError):
+            return ""
 
     async def _get_play_info(
         self, song_id: str, request: QualityRequest | None = None
@@ -208,7 +327,8 @@ class NCMParser(BaseParser):
         if url:
             if item.get("freeTrialInfo"):
                 logger.warning(
-                    f"[NCM] {QUALITY_LABELS.get(level, level)} 仅返回试听片段，尝试下一档位"
+                    f"[NCM] {QUALITY_LABELS.get(level, level)} "
+                    "仅返回试听片段，尝试下一档位"
                 )
                 return None
             actual = str(item.get("level") or level)

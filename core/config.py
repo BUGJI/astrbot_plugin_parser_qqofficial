@@ -250,6 +250,8 @@ class ParserItem(ConfigNode):
     cookies: str | None
     audio_quality: str | None
     audio_quality_fallback: str | None
+    embed_metadata: bool | None
+    embed_lyrics: bool | None
     show_body_text: bool | None
     use_original_image: bool | None
     mixed_layout: bool | None

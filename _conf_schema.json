@@ -754,6 +754,18 @@
                             "标准 128K"
                         ],
                         "default": "exhigh"
+                    },
+                    "embed_metadata": {
+                        "description": "写入音频元数据",
+                        "hint": "下载后把歌名、歌手、专辑、音轨号、封面等写入音频文件标签；仅在「音频以文件形式上传」时生效，需要 ffmpeg",
+                        "type": "bool",
+                        "default": true
+                    },
+                    "embed_lyrics": {
+                        "description": "写入歌词",
+                        "hint": "把网易云歌词（原文与翻译合并）写入音频标签，需先开启写入音频元数据",
+                        "type": "bool",
+                        "default": true
                     }
                 }
             },
